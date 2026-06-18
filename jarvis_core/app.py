@@ -91,6 +91,8 @@ def main(argv: list[str] | None = None) -> int:
         )
     if settings.conversation.enabled:
         log.info("Conversation mode enabled. JARVIS will listen after the clap trigger.")
+    if settings.operator.enabled:
+        log.info("Operator mode enabled. Screenshot/screen commands are available after wake phrase.")
 
     try:
         while True:
@@ -123,7 +125,7 @@ def main(argv: list[str] | None = None) -> int:
                 speak_welcome(settings.speech)
 
             if settings.conversation.enabled:
-                run_conversation_turn(settings.conversation, settings.speech)
+                run_conversation_turn(settings.conversation, settings.speech, settings.operator)
 
             log.info("Returning to clap listener.")
     except KeyboardInterrupt:
