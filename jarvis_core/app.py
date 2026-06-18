@@ -69,7 +69,7 @@ def main(argv: list[str] | None = None) -> int:
 
     clap_settings = settings.clap
     detector = DoubleClapDetector(clap_settings)
-    speech_has_played = False
+    welcome_has_played = False
 
     log.info("JARVIS clap core online.")
     log.info(
@@ -83,8 +83,10 @@ def main(argv: list[str] | None = None) -> int:
     if settings.actions.dry_run:
         log.info("Dry-run mode enabled. Actions will be logged only.")
     if settings.speech.enabled:
+        log.info("Speech enabled for welcome/answers.")
+    if settings.speech.welcome_enabled:
         log.info(
-            "Speech enabled%s.",
+            "Welcome speech enabled%s.",
             " and set to run once" if settings.speech.speak_once else "",
         )
     if settings.conversation.enabled:
@@ -107,11 +109,17 @@ def main(argv: list[str] | None = None) -> int:
                 daemon=True,
             ).start()
 
-            should_speak = settings.speech.enabled and (
-                not settings.speech.speak_once or not speech_has_played
+            welcome_allowed_now = (
+                settings.speech.welcome_before_conversation or not settings.conversation.enabled
             )
-            if should_speak:
-                speech_has_played = True
+            should_speak_welcome = (
+                settings.speech.enabled
+                and settings.speech.welcome_enabled
+                and welcome_allowed_now
+                and (not settings.speech.speak_once or not welcome_has_played)
+            )
+            if should_speak_welcome:
+                welcome_has_played = True
                 speak_welcome(settings.speech)
 
             if settings.conversation.enabled:
