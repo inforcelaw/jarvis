@@ -1,71 +1,126 @@
-# Desktop clap → Jarvis-style welcome
+# JARVIS Clap Core
 
-Python script that listens to your default microphone and runs a **double-clap** welcome flow (Spotify, Chrome windows, ElevenLabs voice, Cursor). See constants at the top of `jarvis.py` for behavior and tuning.
+This is a restart of the JARVIS project around the original **double-clap desktop trigger** idea.
 
-## Setup
+Instead of one huge script that directly opens everything, the project now has a small modular core:
 
-From this project directory:
+- microphone listener
+- reusable double-clap detector
+- safer action launcher
+- `.env` based configuration
+- dry-run mode for testing
+
+The goal is to make this the base for a real desktop assistant later: clap to wake, then JARVIS can open the coding setup, run local tools, or eventually connect to a GUI/agent layer.
+
+## Current behaviour
+
+When a valid double clap is detected, JARVIS can:
+
+- open Claude in Chrome
+- open Cursor
+- optionally open a startup URI such as Spotify
+- optionally open Binance, but this is **off by default**
+
+Text-to-speech and ElevenLabs were intentionally removed from this restart. We can add voice later once the core is stable.
+
+## Install
 
 ```bash
+python -m venv .venv
+.venv\Scripts\activate
 python -m pip install -r requirements.txt
 ```
 
-## Environment variables
+On macOS/Linux:
 
-The script loads a **`.env` file** in the same folder as `jarvis.py` (via `python-dotenv`). You can also set variables in the shell.
-
-### Required (ElevenLabs welcome line)
-
-| Variable | Purpose |
-| -------- | ------- |
-| `ELEVENLABS_API_KEY` | API key from [ElevenLabs](https://elevenlabs.io). |
-| `ELEVENLABS_VOICE_ID` | Voice ID from the ElevenLabs app (My Voices / library). |
-
-Without these, the welcome speech is skipped (other actions may still run).
-
-### Optional
-
-| Variable | Purpose |
-| -------- | ------- |
-| `ELEVENLABS_MODEL_ID` | TTS model (default in code: `eleven_multilingual_v2`). |
-| `ELEVENLABS_OUTPUT_FORMAT` | e.g. `pcm_24000` (must match playback expectations). |
-| `ELEVENLABS_PCM_SAMPLE_RATE` | Override PCM sample rate if it differs from the format name. |
-| `JARVIS_WELCOME_CACHE_DIR` | Custom folder for cached welcome WAV (default: `.cache/jarvis_welcome/` under the project). |
-| `CLAUDE_CODE_URL` | URL opened for Claude in Chrome (default: new chat). |
-| `BINANCE_BTC_URL` | URL opened for Binance in Chrome (default: BTC spot trade). |
-| `CHROME_NEW_WINDOW_WAIT_S` | Seconds to wait for a new Chrome window on Windows (default `25`). |
-| `CHROME_WINDOW_WIDTH` / `CHROME_WINDOW_HEIGHT` | Windowed Chrome size when not fullscreen. |
-
-Example `.env`:
-
-```env
-ELEVENLABS_API_KEY=your_key_here
-ELEVENLABS_VOICE_ID=your_voice_id_here
+```bash
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
 ```
 
+## Configure
+
+Copy the example environment file:
+
+```bash
+copy .env.example .env
+```
+
+On macOS/Linux:
+
+```bash
+cp .env.example .env
+```
+
+Then edit `.env`.
+
+Useful settings:
+
+| Variable | Purpose |
+| --- | --- |
+| `JARVIS_DRY_RUN` | When `true`, clap detection only logs actions. |
+| `JARVIS_SPIKE_RATIO` | Higher = fewer false triggers. Lower = more sensitive. |
+| `JARVIS_MAX_DOUBLE_GAP_S` | Maximum time between the two claps. |
+| `JARVIS_OPEN_CLAUDE` | Opens Claude after the clap trigger. |
+| `JARVIS_OPEN_CURSOR` | Opens Cursor after the clap trigger. |
+| `JARVIS_PLAY_STARTUP_URI` | Enables opening a custom URI such as Spotify. |
+| `JARVIS_STARTUP_URI` | The URL/URI to open when startup URI is enabled. |
+| `JARVIS_OPEN_BINANCE` | Off by default. Enables Binance launch only when deliberately set. |
+
 ## Run
+
+Test safely first:
+
+```bash
+python jarvis.py --dry-run
+```
+
+Run normally:
 
 ```bash
 python jarvis.py
 ```
 
-Allow the microphone if Windows prompts you. Stop with **Ctrl+C**.
+Stop with `Ctrl+C`.
 
-## Tuning
+## Project structure
 
-Edit the constants at the top of `jarvis.py`:
+```txt
+jarvis.py                     # small launcher
+jarvis_core/
+  app.py                      # main microphone loop
+  audio.py                    # RMS audio helpers
+  config.py                   # .env settings
+  actions/
+    launcher.py               # safe app/URL launching
+  triggers/
+    clap.py                   # reusable double-clap detector
+```
 
-| Constant      | Effect                                                            |
-| ------------- | ----------------------------------------------------------------- |
-| `SPIKE_RATIO` | Increase if you get false triggers; decrease if claps are missed. |
-| `COOLDOWN_S`  | Minimum time between two logged claps.                            |
-| `BLOCK_MS`    | Larger = slightly less CPU, a bit less precise timing.            |
-| `MIN_RMS`     | Floor on how loud a block must be (helps in very quiet rooms).  |
-| `SAMPLE_RATE` | Try `48000` if your device does not like `44100`.                 |
+## Next roadmap
+
+### v0.2 — Setup Launcher
+
+- improve Cursor focus instead of only launch
+- bring back multi-monitor Chrome placement cleanly
+- add preset profiles: coding, school, hosting, RP/server work
+
+### v0.3 — Local JARVIS Console
+
+- terminal HUD view
+- live logs that feel like real Discord/Python bot logs
+- action queue and approval cards
+
+### v0.4 — Agent Layer
+
+- connect clap trigger to a local assistant loop
+- let JARVIS create/fix code projects inside a workspace
+- add optional Discord/coding assistant mode
 
 ## Troubleshooting
 
-- **PortAudio / audio errors:** Update audio drivers or try another `SAMPLE_RATE`.
-- **No reaction to claps:** Lower `SPIKE_RATIO` slightly or speak/clap closer to the mic.
-- **Spam logs:** Raise `SPIKE_RATIO` or `COOLDOWN_S`.
-- **No welcome speech:** Set `ELEVENLABS_API_KEY` and `ELEVENLABS_VOICE_ID` in `.env` and restart the terminal so variables load.
+- **No reaction to claps:** lower `JARVIS_SPIKE_RATIO` slightly.
+- **False triggers:** raise `JARVIS_SPIKE_RATIO` or `JARVIS_MIN_RMS`.
+- **Audio errors:** try `JARVIS_SAMPLE_RATE=48000` or check microphone permissions.
+- **Cursor does not open:** install Cursor or add the `cursor` command to PATH.
