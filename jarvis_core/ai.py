@@ -105,6 +105,48 @@ def _trim(text: str, limit: int) -> str:
     return text[: limit - 1].rstrip() + "…"
 
 
+def _looks_like_text_model(model_id: str) -> bool:
+    mid = model_id.lower()
+    blocked = (
+        "audio",
+        "transcribe",
+        "tts",
+        "speech",
+        "image",
+        "vision",
+        "embed",
+        "moderation",
+        "realtime",
+        "search",
+    )
+    return mid.startswith(("gpt-", "o")) and not any(word in mid for word in blocked)
+
+
+def _select_openai_model(client, settings: ConversationSettings) -> str:
+    requested = settings.openai_model.strip()
+    if requested and requested.lower() != "auto":
+        return requested
+
+    try:
+        models = client.models.list()
+        ids = sorted({getattr(model, "id", "") for model in models.data if getattr(model, "id", "")})
+    except Exception as exc:
+        log.warning("Could not list OpenAI models; falling back to gpt-4o-mini: %s", exc)
+        return "gpt-4o-mini"
+
+    for preferred in settings.openai_model_preferences:
+        if preferred in ids:
+            log.info("OpenAI auto-selected model: %s", preferred)
+            return preferred
+
+    for model_id in ids:
+        if _looks_like_text_model(model_id):
+            log.info("OpenAI auto-selected available text model: %s", model_id)
+            return model_id
+
+    raise AIProviderError("OpenAI key worked, but no usable text model was found from models.list().")
+
+
 def _ask_openai(prompt: str, settings: ConversationSettings) -> AIReply:
     try:
         from openai import OpenAI
@@ -112,13 +154,24 @@ def _ask_openai(prompt: str, settings: ConversationSettings) -> AIReply:
         raise AIProviderError("Install OpenAI support with: python -m pip install -r requirements.txt") from exc
 
     client = OpenAI(api_key=settings.openai_api_key)
-    response = client.responses.create(
-        model=settings.openai_model,
-        instructions=settings.system_prompt,
-        input=prompt,
-    )
+    model = _select_openai_model(client, settings)
+
+    try:
+        response = client.responses.create(
+            model=model,
+            instructions=settings.system_prompt,
+            input=prompt,
+        )
+    except Exception as exc:
+        message = str(exc)
+        if "model_not_found" in message or "does not exist" in message:
+            raise AIProviderError(
+                f"OpenAI model {model!r} was rejected. Set JARVIS_OPENAI_MODEL=auto or choose a model listed for your API key."
+            ) from exc
+        raise
+
     text = getattr(response, "output_text", "") or str(response)
-    return AIReply("openai", settings.openai_model, _trim(text, settings.max_response_chars))
+    return AIReply("openai", model, _trim(text, settings.max_response_chars))
 
 
 def _ask_anthropic(prompt: str, settings: ConversationSettings) -> AIReply:
