@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+from dataclasses import replace
 import logging
 import threading
 
@@ -36,8 +37,7 @@ def main(argv: list[str] | None = None) -> int:
 
     settings = load_settings()
     if args.dry_run:
-        # Keep dataclass frozen by creating a shallow replacement of actions.
-        object.__setattr__(settings.actions, "dry_run", True)
+        settings = replace(settings, actions=replace(settings.actions, dry_run=True))
 
     clap_settings = settings.clap
     detector = DoubleClapDetector(clap_settings)
