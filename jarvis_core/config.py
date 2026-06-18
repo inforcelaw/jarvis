@@ -105,6 +105,13 @@ class ConversationSettings:
     vad_silence_s: float = _env_float("JARVIS_VAD_SILENCE_S", 0.85)
     vad_start_rms: float = _env_float("JARVIS_VAD_START_RMS", 0.010)
     vad_stop_rms: float = _env_float("JARVIS_VAD_STOP_RMS", 0.006)
+
+    wake_after_clap_enabled: bool = _env_bool("JARVIS_WAKE_AFTER_CLAP_ENABLED", True)
+    wake_listen_seconds: float = _env_float("JARVIS_WAKE_LISTEN_SECONDS", 3.0)
+    wake_retries: int = _env_int("JARVIS_WAKE_RETRIES", 1)
+    wake_phrases: tuple[str, ...] = _env_csv("JARVIS_WAKE_PHRASES", "hey jarvis,hey javis")
+    wake_use_remainder_as_question: bool = _env_bool("JARVIS_WAKE_USE_REMAINDER_AS_QUESTION", True)
+
     transcribe_provider: str = os.environ.get("JARVIS_TRANSCRIBE_PROVIDER", "openai").strip().lower()
     transcribe_model: str = os.environ.get("JARVIS_TRANSCRIBE_MODEL", "gpt-4o-mini-transcribe").strip()
     ai_mode: str = os.environ.get("JARVIS_AI_MODE", "auto").strip().lower()
