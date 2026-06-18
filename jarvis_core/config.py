@@ -38,6 +38,11 @@ def _env_int(name: str, default: int) -> int:
         return default
 
 
+def _env_csv(name: str, default: str) -> tuple[str, ...]:
+    raw = os.environ.get(name, default)
+    return tuple(part.strip() for part in raw.split(",") if part.strip())
+
+
 @dataclass(frozen=True)
 class ClapSettings:
     sample_rate: int = _env_int("JARVIS_SAMPLE_RATE", 44100)
@@ -73,8 +78,10 @@ class ActionSettings:
 @dataclass(frozen=True)
 class SpeechSettings:
     enabled: bool = _env_bool("JARVIS_SPEECH_ENABLED", True)
+    welcome_enabled: bool = _env_bool("JARVIS_WELCOME_ENABLED", False)
+    welcome_before_conversation: bool = _env_bool("JARVIS_WELCOME_BEFORE_CONVERSATION", False)
     speak_once: bool = _env_bool("JARVIS_SPEAK_ONCE", True)
-    after_actions_delay_s: float = _env_float("JARVIS_SPEECH_DELAY_S", 1.0)
+    after_actions_delay_s: float = _env_float("JARVIS_SPEECH_DELAY_S", 0.0)
     phrase: str = os.environ.get(
         "JARVIS_WELCOME_PHRASE",
         "Welcome home sir. Systems are online.",
@@ -92,7 +99,12 @@ class SpeechSettings:
 class ConversationSettings:
     enabled: bool = _env_bool("JARVIS_CONVERSATION_ENABLED", True)
     listen_seconds: float = _env_float("JARVIS_LISTEN_SECONDS", 7.0)
-    pre_listen_delay_s: float = _env_float("JARVIS_PRE_LISTEN_DELAY_S", 0.4)
+    pre_listen_delay_s: float = _env_float("JARVIS_PRE_LISTEN_DELAY_S", 0.15)
+    vad_enabled: bool = _env_bool("JARVIS_VAD_ENABLED", True)
+    vad_min_record_s: float = _env_float("JARVIS_VAD_MIN_RECORD_S", 0.75)
+    vad_silence_s: float = _env_float("JARVIS_VAD_SILENCE_S", 0.85)
+    vad_start_rms: float = _env_float("JARVIS_VAD_START_RMS", 0.010)
+    vad_stop_rms: float = _env_float("JARVIS_VAD_STOP_RMS", 0.006)
     transcribe_provider: str = os.environ.get("JARVIS_TRANSCRIBE_PROVIDER", "openai").strip().lower()
     transcribe_model: str = os.environ.get("JARVIS_TRANSCRIBE_MODEL", "gpt-4o-mini-transcribe").strip()
     ai_mode: str = os.environ.get("JARVIS_AI_MODE", "auto").strip().lower()
@@ -104,7 +116,11 @@ class ConversationSettings:
     ).strip()
 
     openai_api_key: str = os.environ.get("OPENAI_API_KEY", "").strip()
-    openai_model: str = os.environ.get("JARVIS_OPENAI_MODEL", "gpt-5.5-mini").strip()
+    openai_model: str = os.environ.get("JARVIS_OPENAI_MODEL", "auto").strip()
+    openai_model_preferences: tuple[str, ...] = _env_csv(
+        "JARVIS_OPENAI_MODEL_PREFERENCES",
+        "gpt-5.5,gpt-5.5-instant,gpt-5.4-mini,gpt-5.4,gpt-5,gpt-4.1-mini,gpt-4o-mini",
+    )
 
     anthropic_api_key: str = os.environ.get("ANTHROPIC_API_KEY", "").strip()
     anthropic_model: str = os.environ.get("JARVIS_ANTHROPIC_MODEL", "claude-sonnet-4-5").strip()
