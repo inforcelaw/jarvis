@@ -71,9 +71,28 @@ class ActionSettings:
 
 
 @dataclass(frozen=True)
+class SpeechSettings:
+    enabled: bool = _env_bool("JARVIS_SPEECH_ENABLED", True)
+    speak_once: bool = _env_bool("JARVIS_SPEAK_ONCE", True)
+    after_actions_delay_s: float = _env_float("JARVIS_SPEECH_DELAY_S", 1.0)
+    phrase: str = os.environ.get(
+        "JARVIS_WELCOME_PHRASE",
+        "Welcome home sir. Systems are online.",
+    ).strip()
+    cache_enabled: bool = _env_bool("JARVIS_SPEECH_CACHE_ENABLED", True)
+    cache_dir: str = os.environ.get("JARVIS_SPEECH_CACHE_DIR", "").strip()
+    elevenlabs_api_key: str = os.environ.get("ELEVENLABS_API_KEY", "").strip()
+    elevenlabs_voice_id: str = os.environ.get("ELEVENLABS_VOICE_ID", "").strip()
+    elevenlabs_model_id: str = os.environ.get("ELEVENLABS_MODEL_ID", "eleven_multilingual_v2").strip()
+    elevenlabs_output_format: str = os.environ.get("ELEVENLABS_OUTPUT_FORMAT", "pcm_24000").strip()
+    elevenlabs_pcm_sample_rate: int = _env_int("ELEVENLABS_PCM_SAMPLE_RATE", 24000)
+
+
+@dataclass(frozen=True)
 class AppSettings:
     clap: ClapSettings = ClapSettings()
     actions: ActionSettings = ActionSettings()
+    speech: SpeechSettings = SpeechSettings()
 
 
 def load_settings() -> AppSettings:
