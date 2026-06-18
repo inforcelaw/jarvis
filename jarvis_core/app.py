@@ -10,6 +10,7 @@ import sounddevice as sd
 from jarvis_core.actions.launcher import run_startup_actions
 from jarvis_core.audio import rms_mono
 from jarvis_core.config import load_settings
+from jarvis_core.conversation import run_conversation_turn
 from jarvis_core.speech import speak_welcome
 from jarvis_core.triggers.clap import DoubleClapDetector
 
@@ -29,6 +30,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Jarvis clap-core assistant launcher")
     parser.add_argument("--dry-run", action="store_true", help="Detect claps but only log actions")
     parser.add_argument("--verbose", action="store_true", help="Enable debug logging")
+    parser.add_argument("--no-conversation", action="store_true", help="Disable listen/transcribe/respond mode")
     return parser
 
 
@@ -39,10 +41,22 @@ def main(argv: list[str] | None = None) -> int:
     settings = load_settings()
     if args.dry_run:
         settings = replace(settings, actions=replace(settings.actions, dry_run=True))
+    if args.no_conversation:
+        settings = replace(settings, conversation=replace(settings.conversation, enabled=False))
 
     clap_settings = settings.clap
     detector = DoubleClapDetector(clap_settings)
     speech_has_played = False
+    conversation_running = False
+    conversation_lock = threading.Lock()
+
+    def _conversation_worker() -> None:
+        nonlocal conversation_running
+        try:
+            run_conversation_turn(settings.conversation, settings.speech)
+        finally:
+            with conversation_lock:
+                conversation_running = False
 
     log.info("JARVIS clap core online.")
     log.info(
@@ -60,6 +74,8 @@ def main(argv: list[str] | None = None) -> int:
             "Speech enabled%s.",
             " and set to run once" if settings.speech.speak_once else "",
         )
+    if settings.conversation.enabled:
+        log.info("Conversation mode enabled. JARVIS will listen after the clap trigger.")
 
     try:
         with sd.InputStream(
@@ -101,6 +117,14 @@ def main(argv: list[str] | None = None) -> int:
                         args=(settings.speech,),
                         daemon=True,
                     ).start()
+
+                if settings.conversation.enabled:
+                    with conversation_lock:
+                        if conversation_running:
+                            log.info("Conversation already running; ignoring duplicate clap.")
+                            continue
+                        conversation_running = True
+                    threading.Thread(target=_conversation_worker, daemon=True).start()
     except KeyboardInterrupt:
         log.info("JARVIS clap core stopped.")
         return 0
