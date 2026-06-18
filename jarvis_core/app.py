@@ -12,7 +12,7 @@ from jarvis_core.audio import rms_mono
 from jarvis_core.config import load_settings
 from jarvis_core.conversation import run_conversation_turn
 from jarvis_core.speech import speak_welcome
-from jarvis_core.triggers.clap import DoubleClapDetector
+from jarvis_core.triggers.clap import ClapEvent, DoubleClapDetector
 
 
 log = logging.getLogger("jarvis")
@@ -34,6 +34,29 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def wait_for_double_clap(settings, detector: DoubleClapDetector) -> ClapEvent:
+    """Open the microphone only while listening for the wake clap.
+
+    The stream is closed before conversation mode records the user's question.
+    That avoids fighting over the same mic device on Windows.
+    """
+    with sd.InputStream(
+        samplerate=settings.sample_rate,
+        channels=settings.channels,
+        dtype="float32",
+        blocksize=settings.block_size,
+    ) as stream:
+        while True:
+            data, overflowed = stream.read(settings.block_size)
+            if overflowed:
+                log.warning("Input overflow; try increasing JARVIS_BLOCK_MS.")
+
+            level = rms_mono(data)
+            event = detector.update(level)
+            if event is not None:
+                return event
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     configure_logging(args.verbose)
@@ -47,16 +70,6 @@ def main(argv: list[str] | None = None) -> int:
     clap_settings = settings.clap
     detector = DoubleClapDetector(clap_settings)
     speech_has_played = False
-    conversation_running = False
-    conversation_lock = threading.Lock()
-
-    def _conversation_worker() -> None:
-        nonlocal conversation_running
-        try:
-            run_conversation_turn(settings.conversation, settings.speech)
-        finally:
-            with conversation_lock:
-                conversation_running = False
 
     log.info("JARVIS clap core online.")
     log.info(
@@ -78,53 +91,33 @@ def main(argv: list[str] | None = None) -> int:
         log.info("Conversation mode enabled. JARVIS will listen after the clap trigger.")
 
     try:
-        with sd.InputStream(
-            samplerate=clap_settings.sample_rate,
-            channels=clap_settings.channels,
-            dtype="float32",
-            blocksize=clap_settings.block_size,
-        ) as stream:
-            while True:
-                data, overflowed = stream.read(clap_settings.block_size)
-                if overflowed:
-                    log.warning("Input overflow; try increasing JARVIS_BLOCK_MS.")
+        while True:
+            event = wait_for_double_clap(clap_settings, detector)
+            log.info(
+                "Double clap detected: gap=%.3fs rms=%.5f noise_floor=%.5f threshold=%.5f",
+                event.gap_s,
+                event.level,
+                event.noise_floor,
+                event.threshold,
+            )
 
-                level = rms_mono(data)
-                event = detector.update(level)
-                if event is None:
-                    continue
+            threading.Thread(
+                target=run_startup_actions,
+                args=(settings.actions,),
+                daemon=True,
+            ).start()
 
-                log.info(
-                    "Double clap detected: gap=%.3fs rms=%.5f noise_floor=%.5f threshold=%.5f",
-                    event.gap_s,
-                    event.level,
-                    event.noise_floor,
-                    event.threshold,
-                )
-                threading.Thread(
-                    target=run_startup_actions,
-                    args=(settings.actions,),
-                    daemon=True,
-                ).start()
+            should_speak = settings.speech.enabled and (
+                not settings.speech.speak_once or not speech_has_played
+            )
+            if should_speak:
+                speech_has_played = True
+                speak_welcome(settings.speech)
 
-                should_speak = settings.speech.enabled and (
-                    not settings.speech.speak_once or not speech_has_played
-                )
-                if should_speak:
-                    speech_has_played = True
-                    threading.Thread(
-                        target=speak_welcome,
-                        args=(settings.speech,),
-                        daemon=True,
-                    ).start()
+            if settings.conversation.enabled:
+                run_conversation_turn(settings.conversation, settings.speech)
 
-                if settings.conversation.enabled:
-                    with conversation_lock:
-                        if conversation_running:
-                            log.info("Conversation already running; ignoring duplicate clap.")
-                            continue
-                        conversation_running = True
-                    threading.Thread(target=_conversation_worker, daemon=True).start()
+            log.info("Returning to clap listener.")
     except KeyboardInterrupt:
         log.info("JARVIS clap core stopped.")
         return 0
