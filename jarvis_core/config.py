@@ -141,11 +141,31 @@ class ConversationSettings:
 
 
 @dataclass(frozen=True)
+class OperatorSettings:
+    enabled: bool = _env_bool("JARVIS_OPERATOR_ENABLED", True)
+    screenshot_enabled: bool = _env_bool("JARVIS_OPERATOR_SCREENSHOT_ENABLED", True)
+    describe_screen_enabled: bool = _env_bool("JARVIS_OPERATOR_DESCRIBE_SCREEN_ENABLED", True)
+    allow_open_apps: bool = _env_bool("JARVIS_OPERATOR_ALLOW_OPEN_APPS", True)
+    allow_urls: bool = _env_bool("JARVIS_OPERATOR_ALLOW_URLS", True)
+    allow_mouse: bool = _env_bool("JARVIS_OPERATOR_ALLOW_MOUSE", False)
+    allow_keyboard: bool = _env_bool("JARVIS_OPERATOR_ALLOW_KEYBOARD", False)
+    allow_typing: bool = _env_bool("JARVIS_OPERATOR_ALLOW_TYPING", False)
+    screenshot_dir: str = os.environ.get("JARVIS_OPERATOR_SCREENSHOT_DIR", "").strip()
+    vision_model: str = os.environ.get("JARVIS_OPENAI_VISION_MODEL", "auto").strip()
+    max_description_chars: int = _env_int("JARVIS_OPERATOR_MAX_DESCRIPTION_CHARS", 700)
+    allowed_apps: tuple[str, ...] = _env_csv(
+        "JARVIS_OPERATOR_ALLOWED_APPS",
+        "cursor,chrome,notepad,calculator,explorer,cmd,powershell",
+    )
+
+
+@dataclass(frozen=True)
 class AppSettings:
     clap: ClapSettings = ClapSettings()
     actions: ActionSettings = ActionSettings()
     speech: SpeechSettings = SpeechSettings()
     conversation: ConversationSettings = ConversationSettings()
+    operator: OperatorSettings = OperatorSettings()
 
 
 def load_settings() -> AppSettings:
