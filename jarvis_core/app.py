@@ -10,6 +10,7 @@ import sounddevice as sd
 from jarvis_core.actions.launcher import run_startup_actions
 from jarvis_core.audio import rms_mono
 from jarvis_core.config import load_settings
+from jarvis_core.speech import speak_welcome
 from jarvis_core.triggers.clap import DoubleClapDetector
 
 
@@ -41,6 +42,7 @@ def main(argv: list[str] | None = None) -> int:
 
     clap_settings = settings.clap
     detector = DoubleClapDetector(clap_settings)
+    speech_has_played = False
 
     log.info("JARVIS clap core online.")
     log.info(
@@ -53,6 +55,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     if settings.actions.dry_run:
         log.info("Dry-run mode enabled. Actions will be logged only.")
+    if settings.speech.enabled:
+        log.info(
+            "Speech enabled%s.",
+            " and set to run once" if settings.speech.speak_once else "",
+        )
 
     try:
         with sd.InputStream(
@@ -83,6 +90,17 @@ def main(argv: list[str] | None = None) -> int:
                     args=(settings.actions,),
                     daemon=True,
                 ).start()
+
+                should_speak = settings.speech.enabled and (
+                    not settings.speech.speak_once or not speech_has_played
+                )
+                if should_speak:
+                    speech_has_played = True
+                    threading.Thread(
+                        target=speak_welcome,
+                        args=(settings.speech,),
+                        daemon=True,
+                    ).start()
     except KeyboardInterrupt:
         log.info("JARVIS clap core stopped.")
         return 0
