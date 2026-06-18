@@ -89,10 +89,40 @@ class SpeechSettings:
 
 
 @dataclass(frozen=True)
+class ConversationSettings:
+    enabled: bool = _env_bool("JARVIS_CONVERSATION_ENABLED", True)
+    listen_seconds: float = _env_float("JARVIS_LISTEN_SECONDS", 7.0)
+    pre_listen_delay_s: float = _env_float("JARVIS_PRE_LISTEN_DELAY_S", 0.4)
+    transcribe_provider: str = os.environ.get("JARVIS_TRANSCRIBE_PROVIDER", "openai").strip().lower()
+    transcribe_model: str = os.environ.get("JARVIS_TRANSCRIBE_MODEL", "gpt-4o-mini-transcribe").strip()
+    ai_mode: str = os.environ.get("JARVIS_AI_MODE", "auto").strip().lower()
+    max_response_chars: int = _env_int("JARVIS_MAX_RESPONSE_CHARS", 900)
+    system_prompt: str = os.environ.get(
+        "JARVIS_SYSTEM_PROMPT",
+        "You are JARVIS: calm, capable, precise, lightly witty, and useful. "
+        "Answer like a loyal desktop assistant. Keep replies brief unless detail is needed.",
+    ).strip()
+
+    openai_api_key: str = os.environ.get("OPENAI_API_KEY", "").strip()
+    openai_model: str = os.environ.get("JARVIS_OPENAI_MODEL", "gpt-5.5-mini").strip()
+
+    anthropic_api_key: str = os.environ.get("ANTHROPIC_API_KEY", "").strip()
+    anthropic_model: str = os.environ.get("JARVIS_ANTHROPIC_MODEL", "claude-sonnet-4-5").strip()
+
+    google_api_key: str = os.environ.get("GOOGLE_API_KEY", "").strip()
+    gemini_model: str = os.environ.get("JARVIS_GEMINI_MODEL", "gemini-3.5-flash").strip()
+
+    ollama_enabled: bool = _env_bool("JARVIS_OLLAMA_ENABLED", False)
+    ollama_url: str = os.environ.get("JARVIS_OLLAMA_URL", "http://localhost:11434/api/chat").strip()
+    ollama_model: str = os.environ.get("JARVIS_OLLAMA_MODEL", "llama3.2").strip()
+
+
+@dataclass(frozen=True)
 class AppSettings:
     clap: ClapSettings = ClapSettings()
     actions: ActionSettings = ActionSettings()
     speech: SpeechSettings = SpeechSettings()
+    conversation: ConversationSettings = ConversationSettings()
 
 
 def load_settings() -> AppSettings:
