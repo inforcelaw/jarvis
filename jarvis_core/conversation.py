@@ -12,7 +12,8 @@ import numpy as np
 import sounddevice as sd
 
 from jarvis_core.ai import AIProviderError, ask_ai
-from jarvis_core.config import ConversationSettings, SpeechSettings
+from jarvis_core.config import ConversationSettings, OperatorSettings, SpeechSettings
+from jarvis_core.operator.commands import try_handle_operator_command
 from jarvis_core.speech import speak_text
 
 log = logging.getLogger("jarvis.conversation")
@@ -224,7 +225,11 @@ def wait_for_wake_phrase(settings: ConversationSettings) -> str | None:
     return None
 
 
-def run_conversation_turn(conversation: ConversationSettings, speech: SpeechSettings) -> None:
+def run_conversation_turn(
+    conversation: ConversationSettings,
+    speech: SpeechSettings,
+    operator: OperatorSettings | None = None,
+) -> None:
     if not conversation.enabled:
         return
 
@@ -247,6 +252,12 @@ def run_conversation_turn(conversation: ConversationSettings, speech: SpeechSett
         return
 
     log.info("You asked: %s", question)
+
+    if operator is not None:
+        result = try_handle_operator_command(question, operator, conversation, speech)
+        if result.handled:
+            return
+
     try:
         reply = ask_ai(question, conversation)
     except AIProviderError as exc:
