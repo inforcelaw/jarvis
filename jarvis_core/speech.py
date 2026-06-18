@@ -20,10 +20,10 @@ def _cache_dir(settings: SpeechSettings) -> Path:
     return ROOT_DIR / ".cache" / "jarvis_speech"
 
 
-def _cache_path(settings: SpeechSettings) -> Path:
+def _cache_path(settings: SpeechSettings, text: str) -> Path:
     key = "|".join(
         [
-            settings.phrase,
+            text,
             settings.elevenlabs_voice_id,
             settings.elevenlabs_model_id,
             settings.elevenlabs_output_format,
@@ -94,25 +94,26 @@ def _save_wav(path: Path, raw: bytes, sample_rate: int) -> None:
         raise
 
 
-def speak_welcome(settings: SpeechSettings) -> None:
-    """Speak the configured JARVIS welcome phrase through ElevenLabs.
+def speak_text(settings: SpeechSettings, text: str, *, delay_s: float = 0.0) -> None:
+    """Speak arbitrary text with the configured ElevenLabs voice.
 
     Failures are logged and never crash the clap listener.
     """
     if not settings.enabled:
         return
-    if not settings.phrase:
+    text = text.strip()
+    if not text:
         return
-    if settings.after_actions_delay_s > 0:
-        time.sleep(settings.after_actions_delay_s)
+    if delay_s > 0:
+        time.sleep(delay_s)
 
     if not settings.elevenlabs_voice_id:
         log.warning("Speech enabled but ELEVENLABS_VOICE_ID is missing.")
         return
 
-    cache_path = _cache_path(settings)
+    cache_path = _cache_path(settings, text)
     if settings.cache_enabled and cache_path.is_file():
-        log.info("Playing welcome speech from cache: %s", cache_path)
+        log.info("Playing speech from cache: %s", cache_path)
         if _play_cached_wav(cache_path):
             return
         log.warning("Cached speech failed, requesting fresh audio.")
@@ -131,7 +132,7 @@ def speak_welcome(settings: SpeechSettings) -> None:
         client = ElevenLabs(api_key=settings.elevenlabs_api_key)
         chunks = client.text_to_speech.convert(
             voice_id=settings.elevenlabs_voice_id,
-            text=settings.phrase,
+            text=text,
             model_id=settings.elevenlabs_model_id,
             output_format=settings.elevenlabs_output_format,
         )
@@ -144,8 +145,13 @@ def speak_welcome(settings: SpeechSettings) -> None:
     if settings.cache_enabled:
         try:
             _save_wav(cache_path, raw, sample_rate)
-            log.info("Saved welcome speech cache: %s", cache_path)
+            log.info("Saved speech cache: %s", cache_path)
         except OSError as exc:
             log.warning("Could not save speech cache: %s", exc)
 
     _play_pcm_bytes(raw, sample_rate)
+
+
+def speak_welcome(settings: SpeechSettings) -> None:
+    """Speak the configured JARVIS welcome phrase through ElevenLabs."""
+    speak_text(settings, settings.phrase, delay_s=settings.after_actions_delay_s)
