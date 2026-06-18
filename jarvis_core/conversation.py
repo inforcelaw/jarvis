@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+from dataclasses import replace
 import logging
+import re
 import tempfile
 import time
 import wave
@@ -156,15 +158,89 @@ def transcribe_question(settings: ConversationSettings) -> str:
     return _transcribe_openai(audio_path, settings)
 
 
+def _normalise_phrase(text: str) -> str:
+    return re.sub(r"[^a-z0-9]+", " ", text.lower()).strip()
+
+
+def _wake_phrase_match(transcript: str, phrases: tuple[str, ...]) -> tuple[bool, str]:
+    """Return (matched, remainder_after_wake_phrase)."""
+    cleaned_words = _normalise_phrase(transcript).split()
+    if not cleaned_words:
+        return False, ""
+
+    for phrase in phrases:
+        phrase_words = _normalise_phrase(phrase).split()
+        if not phrase_words:
+            continue
+        for i in range(0, len(cleaned_words) - len(phrase_words) + 1):
+            if cleaned_words[i : i + len(phrase_words)] == phrase_words:
+                remainder_words = cleaned_words[i + len(phrase_words) :]
+                return True, " ".join(remainder_words).strip()
+    return False, ""
+
+
+def wait_for_wake_phrase(settings: ConversationSettings) -> str | None:
+    """Listen for 'hey Jarvis'/'hey Javis' after the clap.
+
+    Returns:
+      - None if the wake phrase was not heard.
+      - '' if the wake phrase was heard but no question followed.
+      - remainder text when the user says: 'hey Jarvis, <question>'.
+    """
+    wake_settings = replace(
+        settings,
+        listen_seconds=settings.wake_listen_seconds,
+        pre_listen_delay_s=min(settings.pre_listen_delay_s, 0.10),
+        vad_min_record_s=min(settings.vad_min_record_s, 0.45),
+        vad_silence_s=min(settings.vad_silence_s, 0.55),
+    )
+
+    attempts = max(1, settings.wake_retries)
+    phrase_text = " / ".join(settings.wake_phrases)
+    for attempt in range(1, attempts + 1):
+        log.info("Armed. Say %r to continue. Attempt %d/%d.", phrase_text, attempt, attempts)
+        try:
+            transcript = transcribe_question(wake_settings)
+        except Exception as exc:
+            log.warning("Could not check wake phrase: %s", exc)
+            return None
+
+        if not transcript:
+            log.info("Wake check heard nothing.")
+            continue
+
+        log.info("Wake check heard: %s", transcript)
+        matched, remainder = _wake_phrase_match(transcript, settings.wake_phrases)
+        if not matched:
+            log.info("Wake phrase not detected; returning to clap listener.")
+            continue
+
+        log.info("Wake phrase accepted.")
+        if settings.wake_use_remainder_as_question and remainder:
+            log.info("Using wake phrase remainder as question: %s", remainder)
+            return remainder
+        return ""
+
+    return None
+
+
 def run_conversation_turn(conversation: ConversationSettings, speech: SpeechSettings) -> None:
     if not conversation.enabled:
         return
 
-    try:
-        question = transcribe_question(conversation)
-    except Exception as exc:
-        log.warning("Could not transcribe question: %s", exc)
-        return
+    question = ""
+    if conversation.wake_after_clap_enabled:
+        wake_remainder = wait_for_wake_phrase(conversation)
+        if wake_remainder is None:
+            return
+        question = wake_remainder.strip()
+
+    if not question:
+        try:
+            question = transcribe_question(conversation)
+        except Exception as exc:
+            log.warning("Could not transcribe question: %s", exc)
+            return
 
     if not question:
         log.info("No question detected.")
